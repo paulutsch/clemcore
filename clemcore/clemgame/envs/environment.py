@@ -146,32 +146,26 @@ class GameEnvironment(ABC):
         """
         module_logger.info(f"[step] Environment step with player: {player.name}")
 
-        # TODO: alternatively, should it check for a bool that is true only if setup was done previously?
-        if not self.observations[player.name] or not self.action_spaces[player.name]:
-            raise ValueError(
-                f"[step] No observation or action space for player: {player.name}"
-            )
+        self.state["aborted"] = False
+        self.state["terminated"] = False
+        self.state["success"] = False
 
         self.state["moves"] += 1
 
-        if not self._max_moves_reached():
-            if self._is_action_valid(player, action):
-                self._update_state_through_action(player, action)
-                module_logger.debug(f"[step] New game state: \n{to_pretty_json(self.state)}")
-            else:
-                module_logger.warning(f"[step] Action invalid: {action}")
+        if self._max_moves_reached():
+            self.state["terminated"] = True
+            self.state["aborted"] = True
+            return
 
-            self.update_observations()
-            module_logger.debug(
-                f"[step] Updated observation for player: {player.name if hasattr(player, 'name') else 'unknown'}"
-            )
-
-        if self.state["aborted"]:
-            module_logger.warning(f"[step] Action aborted: {action}")
-        elif self.state["success"]:
-            module_logger.info(f"[step] Action was successful: {action}")
+        if self._is_action_valid(player, action):
+            self._update_state_through_action(player, action)
+            self.state["terminated"], self.state["success"] = self.check_won(player)
+            module_logger.debug(f"[step] New game state: \n{to_pretty_json(self.state)}")
         else:
-            module_logger.warning(f"[step] Action was unsuccessful: {action}")
+            self.state["aborted"] = True
+            module_logger.warning(f"[step] Action invalid: {action}")
+
+        self.update_observations()
 
     def _max_moves_reached(self) -> bool:
         """
@@ -179,9 +173,6 @@ class GameEnvironment(ABC):
         """
         if self.max_moves is not None and self.state["moves"] >= self.max_moves:
             module_logger.warning(f"[_max_moves_reached] Max moves reached — will abort and terminate")
-            self.state["terminated"] = True
-            self.state["aborted"] = True
-            self.state["success"] = False
             return True
         return False
 
@@ -203,9 +194,6 @@ class GameEnvironment(ABC):
         Check if an action violates the format.
         """
         if action["action_type"] == "violated_format":
-            self.state["terminated"] = False
-            self.state["aborted"] = True
-            self.state["success"] = False
             self.state["warning"] = "Your response violated the format. Please try again."
             return True
         return False
@@ -215,9 +203,6 @@ class GameEnvironment(ABC):
         Check if an action is not in the action space.
         """
         if action["action_type"] not in self.action_spaces[player.name]:
-            self.state["terminated"] = False
-            self.state["aborted"] = True
-            self.state["success"] = False
             self.state["warning"] = "You cannot do that. Please try again."
             return True
         return False
@@ -228,9 +213,6 @@ class GameEnvironment(ABC):
         """
         is_valid, warning = self._is_action_valid_in_state(player, action)
         if not is_valid:
-            self.state["terminated"] = False
-            self.state["aborted"] = True
-            self.state["success"] = False
             self.state["warning"] = warning
             return True
         return False
@@ -241,6 +223,17 @@ class GameEnvironment(ABC):
         Update the state after an action is taken.
 
         This method should update state["terminated"], state["success"], state["aborted"], as well as any other game-specific state fields.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def check_won(self, player: Player) -> Tuple[bool, bool]:
+        """
+        Check the state of the game, and return a tuple of (terminated, success).
+
+        If the game is not yet won but the action was legal, return (False, True).
+        If the game is won, return (True, True).
+        If the game is lost, return (True, False).
         """
         raise NotImplementedError
 
@@ -383,7 +376,7 @@ class GameEnvironment(ABC):
         Example:
             logs = {
                 "player_positions": self.state["player_positions"],
-                "grid": self.render_state(),
+                "grid": self._render_state_as_human_readable(),
                 "terminated": self.state["terminated"],
                 "success": self.state["success"],
                 "aborted": self.state["aborted"],
