@@ -10,11 +10,12 @@ Environments:
 
 import logging
 import os
+import base64
+import imghdr
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union
 
 from clemcore.clemgame.player import Player
-from clemcore.clemgame.resources import store_image
 from clemcore.utils.string_utils import to_pretty_json
 
 module_logger = logging.getLogger(__name__)
@@ -92,14 +93,10 @@ class GameEnvironment(ABC):
 
         self.config = config
         self.image_counter = 0
-        self.images_dir = None
         if self.config.get('render_as') == 'image':
             game_name = self.config.get('game_name', None)
             if game_name is None:
                 raise ValueError('game_name must be provided in config for image storage')
-            abs_path = os.path.abspath(os.curdir)
-            self.images_dir = os.path.join(abs_path, game_name, 'images')
-            os.makedirs(self.images_dir, exist_ok=True)
 
         self.state: GameState = {
             "terminated": False,
@@ -273,18 +270,13 @@ class GameEnvironment(ABC):
 
         Returns:
             Either a string representation of the grid (if render_as is "string"),
-            or a base64-encoded PNG image data (if render_as is "image")
+            or image data as bytes (if render_as is "image")
             or a pretty-printed string representation of the grid (if render_as is "human-readable")
         """
         if self.render_as == "image":
             image_data = self._render_state_as_image(player_name)
-
-            image_filename = f"image_{self.image_counter}.png"
-            image_path = store_image(image_data, os.path.dirname(self.images_dir), image_filename)
-
-            self._last_image_path = image_path
             self.image_counter += 1
-            return image_path
+            return image_data
         elif self.render_as == "string":
             return self._render_state_as_string(player_name)
         elif self.render_as == "human-readable":
@@ -315,11 +307,13 @@ class GameEnvironment(ABC):
         Create an observation for a specific player.
         """
         if self.render_as == "image":
-            image_path = self._last_image_path
+            encoded_image = base64.b64encode(rendered_state).decode('utf-8')
+            data_url = f"data:image/png;base64,{encoded_image}"
+
             observation: Observation = {
                 "role": "user",
                 "content": text_content + "[State image shown below]",
-                "image": [image_path],
+                "image": [data_url],
             }
         else:
             observation: Observation = {
