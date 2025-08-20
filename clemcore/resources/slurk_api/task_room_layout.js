@@ -1,4 +1,3 @@
-// Helper to make the javascript debuggable in web tools
 function injectDebuggableScript(code, name) {
   const script = document.createElement("script");
   script.type = "text/javascript";
@@ -155,3 +154,39 @@ scrollObserver.observe(document.querySelector('#chat-area'), {
     childList: true,
     subtree: true
 });
+
+// We want to replace the text input with a textarea to support multiple line messages
+(function() {
+    const oldInput = document.getElementById('text');
+    if (oldInput) {
+        const textarea = document.createElement('textarea');
+        textarea.id = 'text';
+        textarea.placeholder = oldInput.placeholder || 'Enter your message here!';
+        textarea.rows = 3;
+        textarea.style.cssText = oldInput.style.cssText;
+        oldInput.parentNode.replaceChild(textarea, oldInput);
+
+        // automatic adjustment of the height during the input
+        textarea.addEventListener('input', function () {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+    textarea.addEventListener('keydown', function (e) {
+        const field = e.currentTarget; // das textarea
+
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault(); // no line break
+            const message = field.value.trim();
+
+            // We give null to use current time stamp
+            display_message(self_user, null, message);
+            submit_text(message);
+
+            // empty the field and reset auto-resize
+            field.value = '';
+            field.style.height = 'auto';
+            }
+    });
+    }})
+();
