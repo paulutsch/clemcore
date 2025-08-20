@@ -60,7 +60,7 @@ def build_transcripts(top_dir: str, filter_games: List = None):
         try:
             game_interactions = load_json(interaction_file)
             interactions_dir = Path(interaction_file).parent
-            transcript = build_transcript(game_interactions, interactions_dir)
+            transcript = build_transcript(game_interactions)
             store_file(transcript, "transcript.html", interactions_dir)
             transcript_tex = build_tex(game_interactions)
             store_file(transcript_tex, "transcript.tex", interactions_dir)
@@ -71,7 +71,7 @@ def build_transcripts(top_dir: str, filter_games: List = None):
         stdout_logger.error(f"'{error_count}' exceptions occurred: See clembench.log for details.")
 
 
-def build_transcript(interactions: Dict, interactions_dir: Path):
+def build_transcript(interactions: Dict):
     """Create an HTML file with the interaction transcript.
     The file is stored in the corresponding episode directory.
     Args:
