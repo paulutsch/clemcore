@@ -89,14 +89,12 @@ class GameEnvironment(ABC):
         # string keys represent player names
         self.action_spaces: Dict[str, ActionSpace] = {}
         self.observations: Dict[str, Observation] = {}
-        self.image_counter = 0
 
         self.config = config
+        self.render_as = self.config.get("render_as", "string")
+        self.max_moves = self.config.get("max_moves", None)
+            
         self.image_counter = 0
-        if self.config.get('render_as') == 'image':
-            game_name = self.config.get('game_name', None)
-            if game_name is None:
-                raise ValueError('game_name must be provided in config for image storage')
 
         self.state: GameState = {
             "terminated": False,
@@ -108,9 +106,6 @@ class GameEnvironment(ABC):
         }
 
         self.players: List[Player] = []
-
-        self.max_moves = self.config.get("max_moves", None)
-        module_logger.info(f"[_init] Max moves: {self.max_moves}")
 
     def reset(self):
         """
@@ -218,8 +213,6 @@ class GameEnvironment(ABC):
     def _update_state_through_action(self, player: Player, action: Action):
         """
         Update the state after an action is taken.
-
-        This method should update state["terminated"], state["success"], state["aborted"], as well as any other game-specific state fields.
         """
         raise NotImplementedError
 
