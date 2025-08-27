@@ -48,7 +48,7 @@ class GridState(GameState):
     - grid: The 2D grid of objects
     - player_positions: Dictionary mapping player names to their positions
     """
-    grid: Grid
+    _grid: Grid
     player_positions: Dict[str, Position]
 
 
@@ -83,7 +83,7 @@ class GridEnvironment(GameEnvironment):
                 [GridCell(objects=[], position=(y, x)) for x in range(self.width)]
                 for y in range(self.height)
             ],
-            "player_positions": {},
+            "_player_positions": {},
         }
 
     def reset(self):
@@ -92,7 +92,7 @@ class GridEnvironment(GameEnvironment):
 
         self.state["_grid"] = [[GridCell(objects=[], position=(y, x))
                                         for x in range(self.width)] for y in range(self.height)]
-        self.state["player_positions"] = {}
+        self.state["_player_positions"] = {}
 
     def add_object(self, obj: Object) -> None:
         """Add an object to the grid at its position."""
@@ -127,7 +127,7 @@ class GridEnvironment(GameEnvironment):
         player_pos = None
         explored = None
         if player_name is not None:
-            player_pos = self.state["player_positions"][player_name]
+            player_pos = self.state["_player_positions"][player_name]
             explored = self.explored[player_name]
 
         # render visible area of player if limited visibility is enabled
@@ -182,7 +182,7 @@ class GridEnvironment(GameEnvironment):
         player_pos = None
         explored = None
         if player_name is not None:
-            player_pos = self.state["player_positions"][player_name]
+            player_pos = self.state["_player_positions"][player_name]
             explored = self.explored[player_name]
 
         for i in range(self.height):
