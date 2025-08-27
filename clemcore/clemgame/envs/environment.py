@@ -114,7 +114,7 @@ class GameEnvironment(ABC):
 
         Overwrite this in your inheriting class to account for game-specific state.
 
-        Make sure to call update_observations() after resetting the state.
+        Make sure to call update_observations() in here after resetting the state.
         """
         self.state = {
             "terminated": False,
@@ -159,8 +159,6 @@ class GameEnvironment(ABC):
             module_logger.warning(f"[step] Action invalid: {action}")
 
         self.update_observations()
-
-        self.render_state(player.name)
 
         info = self.info()
         reward = self.reward()
@@ -264,8 +262,6 @@ class GameEnvironment(ABC):
         Make sure text_content includes state["warning"] if the action is invalid, so that the player can get appropriate feedback.
         After that, you can use _create_observation to create the observation for each player.
         Finally, set the observation for each player using self.observations[player.name] = observation.
-
-
         """
         raise NotImplementedError
 
