@@ -8,10 +8,8 @@ Environments:
 - include a termination condition that defines when the environment is finished
 """
 
-import logging
-import os
 import base64
-import imghdr
+import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union
 
@@ -29,11 +27,16 @@ class GameState(TypedDict):
     """Base type definition for the game environment's state with required fields.
 
     Required fields:
+    - render: rendered game state, to be sent to player and logged
     - terminated: Whether the game has terminated
     - success: Whether the game was successful
     - aborted: Whether the game was aborted
-    """
 
+    Public vs Private fields:
+    - keys not starting with '_' are considered public.
+    - keys starting with '_' are considered private and will be omitted by the
+      default info() implementation.
+    """
     terminated: bool
     success: bool
     aborted: bool
@@ -93,8 +96,6 @@ class GameEnvironment(ABC):
         self.config = config
         self.render_as = self.config.get("render_as", "string")
         self.max_moves = self.config.get("max_moves", None)
-            
-        self.image_counter = 0
 
         self.state: GameState = {
             "terminated": False,
@@ -112,6 +113,8 @@ class GameEnvironment(ABC):
         Reset the environment to its initial state.
 
         Overwrite this in your inheriting class to account for game-specific state.
+
+        Make sure to call update_observations() after resetting the state.
         """
         self.state = {
             "terminated": False,
@@ -125,9 +128,7 @@ class GameEnvironment(ABC):
         self.observations = {}
         self.action_spaces = {}
 
-        self.image_counter = 0
-
-    def step(self, player: Player, action: Action) -> None:
+    def step(self, player: Player, action: Action) -> Tuple[float, bool, bool, Dict]:
         """Execute one step in the environment.
 
         Args:
@@ -147,7 +148,7 @@ class GameEnvironment(ABC):
         if self._max_moves_reached():
             self.state["terminated"] = True
             self.state["aborted"] = True
-            return
+            return 0, True, True, self.info()
 
         if self._is_action_valid(player, action):
             self._update_state_through_action(player, action)
@@ -158,6 +159,15 @@ class GameEnvironment(ABC):
             module_logger.warning(f"[step] Action invalid: {action}")
 
         self.update_observations()
+
+        self.render_state(player.name)
+
+        info = self.info()
+        reward = self.reward()
+        terminated = self.state["terminated"]
+        aborted = self.state["aborted"]
+
+        return reward, terminated, aborted, info
 
     def _max_moves_reached(self) -> bool:
         """
@@ -249,7 +259,13 @@ class GameEnvironment(ABC):
         """
         Set the new observations for all players.
 
-        Make sure you include state["warning"] in the observations if the action is invalid, so that the player can get appropriate feedback.
+        Make sure to use render_state(player.name) to get the state of the environment for each player.
+        Create a text_content string that includes the current prompt.
+        Make sure text_content includes state["warning"] if the action is invalid, so that the player can get appropriate feedback.
+        After that, you can use _create_observation to create the observation for each player.
+        Finally, set the observation for each player using self.observations[player.name] = observation.
+
+
         """
         raise NotImplementedError
 
@@ -267,15 +283,15 @@ class GameEnvironment(ABC):
             or a pretty-printed string representation of the grid (if render_as is "human-readable")
         """
         if self.render_as == "image":
-            image_data = self._render_state_as_image(player_name)
-            self.image_counter += 1
-            return image_data
+            render = self._render_state_as_image(player_name)
         elif self.render_as == "string":
-            return self._render_state_as_string(player_name)
+            render = self._render_state_as_string(player_name)
         elif self.render_as == "human-readable":
-            return self._render_state_as_human_readable(player_name)
+            render = self._render_state_as_human_readable(player_name)
         else:
             raise ValueError(f"Invalid render_as value: {self.render_as}")
+
+        return render
 
     @abstractmethod
     def _render_state_as_string(self, player_name: Optional[str] = None) -> str:
@@ -301,12 +317,12 @@ class GameEnvironment(ABC):
         """
         if self.render_as == "image":
             encoded_image = base64.b64encode(rendered_state).decode('utf-8')
-            data_url = f"data:image/png;base64,{encoded_image}"
+            data = f"data:image/png;base64,{encoded_image}"
 
             observation: Observation = {
                 "role": "user",
                 "content": text_content + "[State image shown below]",
-                "image": [data_url],
+                "image": [data],
             }
         else:
             observation: Observation = {
@@ -316,7 +332,7 @@ class GameEnvironment(ABC):
 
         return observation
 
-    def get_observation(self, player: Player) -> Observation:
+    def observe(self, player: Player) -> Observation:
         """
         Get the current observation for a specific player.
 
@@ -326,18 +342,7 @@ class GameEnvironment(ABC):
         Returns:
             The observation for the player
         """
-        module_logger.debug(f"[observe_for] Getting observation for player: {player.name}")
-
-        if player.name not in self.observations:
-            module_logger.warning(
-                f"[observe_for] No observation found for player: {player.name}. Creating default."
-            )
-            raise ValueError(
-                f"[observe_for] No observation found for player: {player.name}"
-            )
-
         observation = self.observations[player.name]
-        module_logger.debug(f"[observe_for] Observation for {player.name}: {observation}")
         return observation
 
     def set_action_space(self, player: Player, action_space: List[Any]):
@@ -350,24 +355,24 @@ class GameEnvironment(ABC):
         """
         self.action_spaces[player.name] = action_space
 
-    def state_to_log(self):
+    def reward(self):
         """
-        Log relevant game-specific state of the environment to the game master.
+        Calculate the reward for the most recent step.
 
-        This method will be called after each step in the environment.
+        Overwrite this method in your subclass to implement custom reward logic.
 
-        It should log the current state of the environment to the game master.
-
-        This method is optional. Overwrite it if you need state variables for later computation of scores.
-
-        Example:
-            logs = {
-                "player_positions": self.state["player_positions"],
-                "grid": self._render_state_as_human_readable(),
-                "terminated": self.state["terminated"],
-                "success": self.state["success"],
-                "aborted": self.state["aborted"],
-            }
-            return logs
+        Returns:
+            A float reward for the most recent step.
         """
-        pass
+        aborted = self.state["aborted"]
+        return 0 if aborted else 1
+
+    def info(self) -> Dict[str, Any]:
+        """
+        Return a dictionary with the current public state of the environment.
+
+        By default, all state keys that do NOT start with '_' are considered public and will be exported.
+
+        Subclasses can override to add computed values or expose additional/private fields as needed.
+        """
+        return {key: value for key, value in self.state.items() if not str(key).startswith("_")}

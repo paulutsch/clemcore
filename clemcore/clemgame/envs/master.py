@@ -1,17 +1,12 @@
 import abc
 import collections
 import logging
-from typing import List, Dict, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 
 from clemcore import backends
 from clemcore.clemgame.envs.environment import Action, GameEnvironment
-
 from clemcore.clemgame.master import GameMaster
-from clemcore.clemgame.metrics import (
-    METRIC_ABORTED,
-    METRIC_LOSE,
-    METRIC_SUCCESS
-)
+from clemcore.clemgame.metrics import METRIC_ABORTED, METRIC_LOSE, METRIC_SUCCESS
 from clemcore.clemgame.player import Player
 from clemcore.clemgame.registry import GameSpec
 
@@ -26,7 +21,6 @@ class EnvGameMaster(GameMaster):
             game_spec: GameSpec,
             experiment: dict,
             player_models: List[backends.Model],
-            game_environment: Optional[GameEnvironment] = None,
     ):
         """
         Args:
@@ -34,11 +28,9 @@ class EnvGameMaster(GameMaster):
             path: Path to the game (as specified in game_registry).
             experiment: The experiment (set of instances) to use.
             player_models: Player models to use for one or two players.
-            game_environment: The environment that maintains the game state.
         """
         super().__init__(game_spec, experiment, player_models)
-        if game_environment is not None:
-            self.game_environment = game_environment
+        self.game_environment = None
 
         # set players
         self.players_by_names: Dict[str, Player] = collections.OrderedDict()
@@ -112,12 +104,12 @@ class EnvGameMaster(GameMaster):
     @abc.abstractmethod
     def _on_setup(self, **kwargs):
         """Method executed at the start of the default setup method.
-        Template method: Must be implemented!
+
         Use add_player() here to add the players.
-        Also add the game environment here.
+        Add the game environment here and reset it.
+
         Args:
-            kwargs: Keyword arguments of the game instance. This is usually a game instance object
-                read from the game's instances.json.
+            kwargs: Keyword arguments of the game instance.
         """
         raise NotImplementedError
 
@@ -125,39 +117,35 @@ class EnvGameMaster(GameMaster):
         """
         Returns the current player and their observation from the environment.
         """
-        if self.current_player is None:
-            raise RuntimeError("No current player set in EnvGameMaster.")
-        observation = self.game_environment.get_observation(self.current_player)
+        observation = self.game_environment.observe(self.current_player)
         return self.current_player, observation
 
     def step(self, response: str) -> Tuple[bool, Dict]:
         """
         Applies the player's response as an action in the environment, advances the game, and returns (done, info).
         """
-        info = {}  # mostly empty for now
+        state = {}
 
         if not self._player_response_in_expected_format(self.current_player, response):
-            if self._should_terminate_on_invalid_response():
-                self._on_after_game()
-                self.log_game_end()
-                self._end_game()
-                return True, info
             action = self._violated_format_action()
         else:
-            action = self._create_action_from_response(response)
+            action = self._parse_action_from_response(response)
 
-        self.game_environment.step(self.current_player, action)
-        if self.game_environment.state["aborted"]:
+        reward, terminated, aborted, state = self.game_environment.step(self.current_player, action)
+
+        self.log_to_self("state", state)
+        self.log_to_self("reward", reward)
+
+        if aborted:
             self.count_request_violation()
-        self.log_to_self("state", self.game_environment.state_to_log())
 
-        if self.is_done():
+        if terminated:
             self._on_after_game()
             self.log_game_end()
             self._end_game()
-            return True, info
+            return terminated, state
 
-        if self._should_pass_turn():
+        if self._should_pass_turn(aborted):
             self.current_player = self._next_player()
 
         if self._start_next_round():
@@ -166,7 +154,7 @@ class EnvGameMaster(GameMaster):
             self.log_next_round()
             self._on_before_round()
 
-        return False, info
+        return terminated, state
 
     def is_done(self) -> bool:
         """
@@ -190,11 +178,13 @@ class EnvGameMaster(GameMaster):
         """
         return self.current_player_idx == 0
 
-    def _should_pass_turn(self):
+    def _should_pass_turn(self, aborted: bool):
         """
         Whether to pass the turn to the next player. Otherwise, the current player keeps playing
         based on the context set via set_player_context(player, content).
         """
+        if aborted:
+            return False
         return True
 
     @abc.abstractmethod
@@ -209,16 +199,6 @@ class EnvGameMaster(GameMaster):
             True, if the response is fine. Otherwise, False.
         """
         raise NotImplementedError
-
-    def _create_action_from_response(self, response: str) -> Action:
-        """
-        Create an action from a player's response.
-        """
-        try:
-            return self._parse_action_from_response(response)
-        except Exception as e:
-            module_logger.warning(f"[_get_action] Error parsing action from response: {e}")
-            return self._violated_format_action()
 
     def _violated_format_action(self) -> Action:
         """
@@ -239,14 +219,6 @@ class EnvGameMaster(GameMaster):
                 - body: The text response from the player
         """
         raise NotImplementedError
-
-    def _should_terminate_on_invalid_response(self) -> bool:
-        """
-        Decide if the game should terminate on an invalid response.
-
-        Default: False
-        """
-        return False
 
     def _on_before_round(self):
         """Executed in the play loop before a new round of gameplay starts.

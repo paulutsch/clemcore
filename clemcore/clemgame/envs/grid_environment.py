@@ -79,7 +79,7 @@ class GridEnvironment(GameEnvironment):
         self.limited_visibility = config.get("limited_visibility", False)
 
         self.state: GridState = {
-            "grid": [
+            "_grid": [
                 [GridCell(objects=[], position=(y, x)) for x in range(self.width)]
                 for y in range(self.height)
             ],
@@ -90,7 +90,7 @@ class GridEnvironment(GameEnvironment):
         """Reset the environment to its initial state."""
         super().reset()
 
-        self.state["grid"] = [[GridCell(objects=[], position=(y, x))
+        self.state["_grid"] = [[GridCell(objects=[], position=(y, x))
                                         for x in range(self.width)] for y in range(self.height)]
         self.state["player_positions"] = {}
 
@@ -98,56 +98,22 @@ class GridEnvironment(GameEnvironment):
         """Add an object to the grid at its position."""
         y, x = obj.position
         if 0 <= x < self.width and 0 <= y < self.height:
-            self.state["grid"][y][x]["objects"].append(obj)
+            self.state["_grid"][y][x]["objects"].append(obj)
         else:
             raise ValueError(f"Position {obj.position} is out of bounds")
 
     def remove_object(self, obj: Object) -> None:
         """Remove an object from the grid."""
         y, x = obj.position
-        if obj in self.state["grid"][y][x]["objects"]:
-            self.state["grid"][y][x]["objects"].remove(obj)
+        if obj in self.state["_grid"][y][x]["objects"]:
+            self.state["_grid"][y][x]["objects"].remove(obj)
 
     def get_objects_at(self, position: Position) -> List[Object]:
         """Get all objects at a given position."""
         y, x = position
         if 0 <= x < self.width and 0 <= y < self.height:
-            return self.state["grid"][y][x]["objects"]
+            return self.state["_grid"][y][x]["objects"]
         return []
-
-    def get_observation(self, player: Player) -> Observation:
-        """Get the current observation for a specific player.
-
-        Args:
-            player: The player to get the observation for
-
-        Returns:
-            The observation for the player
-        """
-        logger.debug(f"[observe_for] Getting observation for player: {player.name}")
-
-        if player.name not in self.observations:
-            logger.warning(
-                f"[observe_for] No observation found for player: {player.name}. Creating default."
-            )
-            raise ValueError(
-                f"[observe_for] No observation found for player: {player.name}"
-            )
-
-        observation = self.observations[player.name]
-        logger.debug(f"[observe_for] Observation for {player.name}: {observation}")
-        return observation
-
-    @abstractmethod
-    def update_observations(self):
-        """Update observations for all players based on their current positions.
-
-        This method is called after each step to ensure all players have up-to-date observations
-        based on their current positions in the grid.
-
-        Should use render_state per player.
-        """
-        raise NotImplementedError
 
     def _render_state_as_string(self, player_name: Optional[str] = None) -> str:
         """Format the grid for display as string.
@@ -170,7 +136,7 @@ class GridEnvironment(GameEnvironment):
             for i in range(max(0, y - 1), min(self.height, y + 2)):
                 row_str = ""
                 for j in range(max(0, x - 1), min(self.width, x + 2)):
-                    cell = self.state["grid"][i][j]
+                    cell = self.state["_grid"][i][j]
                     cell_content = cell["objects"][-1].symbol if cell["objects"] != [] else "empty"
                     row_str += f"({i},{j}) is {cell_content}, "
                 grid_str += row_str.lstrip() + "\n"
@@ -180,7 +146,7 @@ class GridEnvironment(GameEnvironment):
         for i in range(self.height):
             row_str = ""
             for j in range(self.width):
-                cell = self.state["grid"][i][j]
+                cell = self.state["_grid"][i][j]
                 if explored is not None:
                     if explored[i][j]:
                         cell_content = cell["objects"][-1].symbol if cell["objects"] != [] else "empty"
@@ -221,7 +187,7 @@ class GridEnvironment(GameEnvironment):
 
         for i in range(self.height):
             for j in range(self.width):
-                cell = self.state["grid"][i][j]
+                cell = self.state["_grid"][i][j]
 
                 if explored is not None and not explored[i][j]:
                     cell_content = "?"
@@ -277,12 +243,8 @@ class GridEnvironment(GameEnvironment):
         """
         Pretty print the grid state.
         """
-        if player_name is not None:
-            player_pos = self.state["player_positions"][player_name]
-            explored = self.explored[player_name]
-
         pretty_grid = ""
-        for row in self.state["grid"]:
+        for row in self.state["_grid"]:
             row_str = ""
             for cell in row:
                 row_str += f"{cell['objects'][-1].pretty_symbol if cell['objects'] != [] else '⬜️'}"
