@@ -199,43 +199,54 @@ class GridEnvironment(GameEnvironment):
 
         return True, ""
 
+    def visible_grid(self, player_name: Optional[str]) -> List[List[bool]]:
+        """
+        Compute a boolean visibility mask for the grid based on
+        limited_visibility, show_explored, and player position/exploration.
+
+        True indicates that a cell is visible to the player.
+        """
+        if not self.limited_visibility:
+            # full grid
+            return [[True for _ in range(self.width)] for _ in range(self.height)]
+
+        if self.show_explored:
+            # explored map
+            return self.state["_explored"].get(player_name)
+
+        # limited visibility and no explored map: local 3x3 around player
+        mask = [[False for _ in range(self.width)] for _ in range(self.height)]
+        pos = self.get_player_position(player_name)
+        if pos is not None:
+            y, x = pos
+            for i in range(max(0, y - 1), min(self.height, y + 2)):
+                for j in range(max(0, x - 1), min(self.width, x + 2)):
+                    mask[i][j] = True
+            return mask
+
+        # fallback: show full grid
+        return [[True for _ in range(self.width)] for _ in range(self.height)]
+
     def _render_state_as_string(self, player_name: Optional[str] = None) -> str:
         """Format the grid for display as string."""
         grid_str = ""
 
-        player_pos = None
-        explored = None
+        mask = self.visible_grid(player_name)
 
-        if player_name is not None and self.state["_player_positions"] is not None and self.show_explored:
-            player_pos = self.state["_player_positions"][player_name]
-            explored = self.state["_explored"][player_name]
-
-        # render visible area of player if limited visibility is enabled
-        if player_pos is not None and self.limited_visibility:
-            y, x = player_pos
-            for i in range(max(0, y - 1), min(self.height, y + 2)):
-                row_str = ""
-                for j in range(max(0, x - 1), min(self.width, x + 2)):
-                    cell = self.state["_grid"][i][j]
-                    cell_content = cell["objects"][-1].symbol if cell["objects"] != [] else "empty"
-                    row_str += f"({i},{j}) is {cell_content}, "
-                grid_str += row_str.lstrip() + "\n"
-            return grid_str
-
-        # render full grid
         for i in range(self.height):
             row_str = ""
             for j in range(self.width):
                 cell = self.state["_grid"][i][j]
-                if explored is not None:
-                    if explored[i][j]:
-                        cell_content = cell["objects"][-1].symbol if cell["objects"] != [] else "empty"
-                    else:
-                        cell_content = "❓"
+                if not mask[i][j]:
+                    cell_content = "?"
                 else:
-                    cell_content = cell["objects"][-1].symbol if cell["objects"] != [] else "empty"
+                    if cell["objects"]:
+                        cell_content = cell["objects"][-1].symbol
+                    else:
+                        cell_content = "empty"
                 row_str += f"({i},{j}) is {cell_content}, "
-            grid_str += row_str.lstrip() + "\n"
+            if row_str:
+                grid_str += row_str.lstrip() + "\n"
         return grid_str
 
     def _render_state_as_image(self, player_name: Optional[str] = None) -> bytes:
@@ -249,6 +260,8 @@ class GridEnvironment(GameEnvironment):
         Returns:
             Base64-encoded PNG image data
         """
+        mask = self.visible_grid(player_name)
+
         fig, ax = plt.subplots(figsize=(max(6, self.width * 0.8), max(4, self.height * 0.6)))
         ax.set_xlim(0, self.width)
         ax.set_ylim(0, self.height)
@@ -260,16 +273,13 @@ class GridEnvironment(GameEnvironment):
         ax.set_facecolor('white')
 
         player_pos = None
-        explored = None
-        if player_name is not None:
-            player_pos = self.state["_player_positions"][player_name]
-            explored = self.state["_explored"][player_name]
+        if player_name is not None and self.state["_player_positions"] is not None:
+            player_pos = self.state["_player_positions"].get(player_name)
 
         for i in range(self.height):
             for j in range(self.width):
                 cell = self.state["_grid"][i][j]
-
-                if explored is not None and not explored[i][j]:
+                if not mask[i][j]:
                     cell_content = "?"
                     cell_color = 'lightgray'
                 else:
@@ -291,24 +301,6 @@ class GridEnvironment(GameEnvironment):
                 ax.text(j + 0.5, self.height - 1 - i + 0.5, cell_content,
                         ha='center', va='center', fontsize=16, fontweight='bold')
 
-        if player_pos is not None:
-            row, col = player_pos
-            rect = patches.Rectangle((col, self.height - 1 - row), 1, 1,
-                                     linewidth=3, edgecolor='red',
-                                     facecolor='none')
-            ax.add_patch(rect)
-
-        # if limited visibility, darken cells outside visible range
-        if self.limited_visibility and player_pos is not None:
-            row, col = player_pos
-            for i in range(self.height):
-                for j in range(self.width):
-                    if abs(i - row) > 1 or abs(j - col) > 1:
-                        rect = patches.Rectangle((j, self.height - 1 - i), 1, 1,
-                                                 linewidth=1, edgecolor='black',
-                                                 facecolor='darkgray', alpha=0.7)
-                        ax.add_patch(rect)
-
         plt.tight_layout()
 
         # convert to base64-encoded PNG
@@ -324,9 +316,21 @@ class GridEnvironment(GameEnvironment):
         Pretty print the grid state.
         """
         pretty_grid = ""
-        for row in self.state["_grid"]:
+
+        mask = self.visible_grid(player_name)
+
+        for i in range(self.height):
             row_str = ""
-            for cell in row:
-                row_str += f"{cell['objects'][-1].pretty_symbol if cell['objects'] != [] else '⬜️'}"
-            pretty_grid += row_str.lstrip() + "\n"
+            for j in range(self.width):
+                cell = self.state["_grid"][i][j]
+                if not mask[i][j]:
+                    cell_pretty = "❓"
+                else:
+                    if cell["objects"]:
+                        cell_pretty = cell['objects'][-1].pretty_symbol
+                    else:
+                        cell_pretty = '⬜️'
+                row_str += f"{cell_pretty}"
+            if row_str:
+                pretty_grid += row_str.lstrip() + "\n"
         return f"{pretty_grid}"
