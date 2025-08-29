@@ -272,10 +272,6 @@ class GridEnvironment(GameEnvironment):
 
         ax.set_facecolor('white')
 
-        player_pos = None
-        if player_name is not None and self.state["_player_positions"] is not None:
-            player_pos = self.state["_player_positions"].get(player_name)
-
         for i in range(self.height):
             for j in range(self.width):
                 cell = self.state["_grid"][i][j]
