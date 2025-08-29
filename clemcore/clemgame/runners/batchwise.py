@@ -245,7 +245,6 @@ def __prepare_game_sessions(game_benchmark: GameBenchmark,
             game_master = game_benchmark.create_game_master(experiment, player_models)
             callbacks.on_game_start(game_master, game_instance)
             game_master.setup(**game_instance)
-            callbacks.on_game_ready(game_master, game_instance)
             game_sessions.append(GameSession(session_id, game_master, game_instance))
         except Exception:  # continue with other instances if something goes wrong
             message = f"{game_benchmark.game_name}: Exception for instance {game_instance['game_id']} (but continue)"

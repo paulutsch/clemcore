@@ -27,7 +27,6 @@ def run(game_benchmark: GameBenchmark,
             game_master = game_benchmark.create_game_master(experiment, player_models)
             callbacks.on_game_start(game_master, game_instance)
             game_master.setup(**game_instance)
-            callbacks.on_game_ready(game_master, game_instance)
             done = False
             while not done:
                 player, context = game_master.observe()
