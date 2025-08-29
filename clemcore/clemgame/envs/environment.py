@@ -79,7 +79,7 @@ class GameEnvironment(ABC):
     This class follows both the Gymnasium interface and the clembench framework.
     """
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any]):
         """
         Initialize a game environment.
 
