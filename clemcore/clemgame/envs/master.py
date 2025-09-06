@@ -4,7 +4,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 from clemcore import backends
-from clemcore.clemgame.envs.environment import Action, GameEnvironment
+from clemcore.clemgame.envs.environment import Action
 from clemcore.clemgame.master import GameMaster
 from clemcore.clemgame.metrics import METRIC_ABORTED, METRIC_LOSE, METRIC_SUCCESS
 from clemcore.clemgame.player import Player
@@ -24,8 +24,7 @@ class EnvGameMaster(GameMaster):
     ):
         """
         Args:
-            name: The name of the game (as specified in game_registry).
-            path: Path to the game (as specified in game_registry).
+            game_spec: The game spec (as specified in game_registry).
             experiment: The experiment (set of instances) to use.
             player_models: Player models to use for one or two players.
         """
@@ -89,13 +88,11 @@ class EnvGameMaster(GameMaster):
 
     def setup(self, **kwargs):
         """Load resources and prepare everything to play the game.
-        Needs to log the players dictionary via self.log_players(players_dict).
         Intended to be left as-is by inheriting classes. Implement game-specific setup functionality in the _on_setup
         method.
         Called by the game's GameBenchmark run method for each game instance.
         Args:
-            kwargs: Keyword arguments used to set up the GameMaster instance. This is usually a game instance object
-                read from the game's instances.json.
+            kwargs: A game instance dictionary read from the game's instances.json.
         """
         self._on_setup(**kwargs)
         self.current_player = self.get_players()[self.current_player_idx]
@@ -106,7 +103,7 @@ class EnvGameMaster(GameMaster):
         """Method executed at the start of the default setup method.
 
         Use add_player() here to add the players.
-        Add the game environment here and reset it.
+        Instantiate, add, and reset the game environment here.
 
         Args:
             kwargs: Keyword arguments of the game instance.
@@ -126,7 +123,7 @@ class EnvGameMaster(GameMaster):
         """
         state = {}
 
-        if not self._player_response_in_expected_format(self.current_player, response):
+        if not self._response_valid(self.current_player, response):
             action = self._violated_format_action()
         else:
             action = self._parse_action_from_response(response)
@@ -136,7 +133,7 @@ class EnvGameMaster(GameMaster):
         self.log_to_self("state", state)
         self.log_to_self("reward", reward)
 
-        if aborted:
+        if aborted and reward == 0:
             self.count_request_violation()
 
         if terminated:
@@ -188,9 +185,9 @@ class EnvGameMaster(GameMaster):
         return True
 
     @abc.abstractmethod
-    def _player_response_in_expected_format(self, player: Player, response: str) -> bool:
+    def _response_valid(self, player: Player, response: str) -> bool:
         """
-        Decide if a player response is valid. An invalid response breaks the game rules. In this case, depending on _should_terminate_on_invalid_response(), the game might be terminated.
+        Decide if a player response is valid. An invalid response breaks the format rules. In this case, depending on _should_terminate_on_invalid_response(), the game might be terminated.
 
         Args:
             player: The player that gave the response.

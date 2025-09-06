@@ -41,7 +41,7 @@ class GameState(TypedDict):
     success: bool
     aborted: bool
     moves: int
-    warning: str
+    _warning: str
     # add fields for game-specific state on inheritance
 
 
@@ -85,7 +85,7 @@ class GameEnvironment(ABC):
 
         Args:
             action_spaces: Dictionary of action spaces, one key per player
-            observation_spaces: Dictionary of observation spaces, one key per player
+            observations: Dictionary of observation spaces, one key per player
         """
         super().__init__()
 
@@ -102,7 +102,7 @@ class GameEnvironment(ABC):
             "success": False,
             "aborted": False,
             "moves": 0,
-            "warning": "",
+            "_warning": "",
             # add fields for game-specific state on inheritance
         }
 
@@ -114,19 +114,32 @@ class GameEnvironment(ABC):
 
         Overwrite this in your inheriting class to account for game-specific state.
 
-        Make sure to call update_observations() in here after resetting the state.
+        Make sure to call _update_observations() in here after resetting the state.
         """
         self.state = {
             "terminated": False,
             "success": False,
             "aborted": False,
             "moves": 0,
-            "warning": "",
+            "_warning": "",
             # add fields for game-specific state on inheritance
         }
 
         self.observations = {}
         self.action_spaces = {}
+
+    def observe(self, player: Player) -> Observation:
+        """
+        Get the current observation for a specific player.
+
+        Args:
+            player: The player to get the observation for
+
+        Returns:
+            The observation for the player
+        """
+        observation = self.observations[player.name]
+        return observation
 
     def step(self, player: Player, action: Action) -> Tuple[float, bool, bool, Dict]:
         """Execute one step in the environment.
@@ -139,33 +152,33 @@ class GameEnvironment(ABC):
         """
         module_logger.info(f"[step] Environment step with player: {player.name}")
 
-        self.state["aborted"] = False
         self.state["terminated"] = False
         self.state["success"] = False
+        self.state["aborted"] = False
 
         self.state["moves"] += 1
 
-        if self._max_moves_reached():
-            self.state["terminated"] = True
-            self.state["aborted"] = True
-            return 0, True, True, self.info()
-
         if self._is_action_valid(player, action):
             self._update_state_through_action(player, action)
-            self.state["terminated"], self.state["success"] = self.check_won(player)
+            self.state["terminated"], self.state["success"] = self._check_won(player)
             module_logger.debug(f"[step] New game state: \n{to_pretty_json(self.state)}")
         else:
             self.state["aborted"] = True
             module_logger.warning(f"[step] Action invalid: {action}")
 
-        self.update_observations()
+        self._update_observations()
+
+        reward = self.reward()
+
+        if self._max_moves_reached():
+            if not self.state["terminated"]:
+                self.state["terminated"] = True
+                self.state["success"] = False
+                self.state["aborted"] = True
 
         info = self.info()
-        reward = self.reward()
-        terminated = self.state["terminated"]
-        aborted = self.state["aborted"]
 
-        return reward, terminated, aborted, info
+        return reward, self.state["terminated"], self.state["aborted"], info
 
     def _max_moves_reached(self) -> bool:
         """
@@ -194,7 +207,7 @@ class GameEnvironment(ABC):
         Check if an action violates the format.
         """
         if action["action_type"] == "violated_format":
-            self.state["warning"] = "Your response violated the format. Please try again."
+            self.state["_warning"] = "Your response violated the format. Please try again."
             return True
         return False
 
@@ -203,7 +216,7 @@ class GameEnvironment(ABC):
         Check if an action is not in the action space.
         """
         if action["action_type"] not in self.action_spaces[player.name]:
-            self.state["warning"] = "You cannot do that. Please try again."
+            self.state["_warning"] = "You cannot do that. Please try again."
             return True
         return False
 
@@ -213,7 +226,7 @@ class GameEnvironment(ABC):
         """
         is_valid, warning = self._is_action_valid_in_state(player, action)
         if not is_valid:
-            self.state["warning"] = warning
+            self.state["_warning"] = warning
             return True
         return False
 
@@ -225,7 +238,7 @@ class GameEnvironment(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def check_won(self, player: Player) -> Tuple[bool, bool]:
+    def _check_won(self, player: Player) -> Tuple[bool, bool]:
         """
         Check the state of the game, and return a tuple of (terminated, success).
 
@@ -242,7 +255,7 @@ class GameEnvironment(ABC):
 
         Overwrite this method in your subclass to implement custom validation logic based on the current state.
 
-        Make sure you set state["warning"] in here if the action is invalid, so that the player can get appropriate feedback.
+        Make sure you set state["_warning"] in here if the action is invalid, so that the player can get appropriate feedback.
         """
         raise NotImplementedError
 
@@ -253,19 +266,19 @@ class GameEnvironment(ABC):
         self.players.append(player)
 
     @abstractmethod
-    def update_observations(self):
+    def _update_observations(self):
         """
         Set the new observations for all players.
 
-        Make sure to use render_state(player.name) to get the state of the environment for each player.
+        Make sure to use _render_state(player.name) to get the state of the environment for each player.
         Create a text_content string that includes the current prompt.
-        Make sure text_content includes state["warning"] if the action is invalid, so that the player can get appropriate feedback.
+        Make sure text_content includes state["_warning"] if the action is invalid, so that the player can get appropriate feedback.
         After that, you can use _create_observation to create the observation for each player.
         Finally, set the observation for each player using self.observations[player.name] = observation.
         """
         raise NotImplementedError
 
-    def render_state(self, player_name: Optional[str] = None) -> Union[str, bytes]:
+    def _render_state(self, player_name: Optional[str] = None) -> Union[str, bytes]:
         """Format the state for display as string or image.
 
         Args:
@@ -328,20 +341,7 @@ class GameEnvironment(ABC):
 
         return observation
 
-    def observe(self, player: Player) -> Observation:
-        """
-        Get the current observation for a specific player.
-
-        Args:
-            player: The player to get the observation for
-
-        Returns:
-            The observation for the player
-        """
-        observation = self.observations[player.name]
-        return observation
-
-    def set_action_space(self, player: Player, action_space: List[Any]):
+    def _set_action_space(self, player: Player, action_space: List[Any]):
         """
         Set the action space for a specific player.
 

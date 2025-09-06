@@ -20,7 +20,7 @@ class Object(ABC):
     position: Position
     name: str
     symbol: str  # char to be shown in the grid
-    pretty_symbol: str  # emoji to be shown in the grid on render_state_as_human_readable
+    pretty_symbol: str  # emoji to be shown in the grid on _render_state_as_human_readable
 
     def __str__(self) -> str:
         return f"{self.name} at {self.position}"
