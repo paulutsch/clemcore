@@ -74,7 +74,7 @@ class GridEnvironment(GameEnvironment):
         self.state["_grid"] = [[GridCell(objects=[], position=(y, x))
                                         for x in range(self.width)] for y in range(self.height)]
 
-    def add_object(self, obj: Object) -> None:
+    def _add_object(self, obj: Object) -> None:
         """Add an object to the grid at its position."""
         y, x = obj.position
         if 0 <= x < self.width and 0 <= y < self.height:
@@ -82,13 +82,13 @@ class GridEnvironment(GameEnvironment):
         else:
             raise ValueError(f"Position {obj.position} is out of bounds")
 
-    def remove_object(self, obj: Object) -> None:
+    def _remove_object(self, obj: Object) -> None:
         """Remove an object from the grid."""
         y, x = obj.position
         if obj in self.state["_grid"][y][x]["objects"]:
             self.state["_grid"][y][x]["objects"].remove(obj)
 
-    def get_objects_at(self, position: Position) -> List[Object]:
+    def _get_objects_at(self, position: Position) -> List[Object]:
         """Get all objects at a given position."""
         y, x = position
         if 0 <= x < self.width and 0 <= y < self.height:

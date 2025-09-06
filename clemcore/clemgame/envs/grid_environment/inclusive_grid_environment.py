@@ -1,8 +1,9 @@
 import logging
 from typing import Dict, List, Literal, Optional, Tuple
 
-from .grid_environment import GridEnvironment, GridState, Object
 from clemcore.clemgame.player import Player
+
+from .grid_environment import GridEnvironment, GridState, Object
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class InclusiveGridEnvironment(GridEnvironment):
         self.state["_player_positions"] = {}
         for i, player in enumerate(self.players):
             player_start = players_start[i]
-            self.add_object(PlayerObject(position=player_start, player=player))
+            self._add_object(PlayerObject(position=player_start, player=player))
             self.state["_player_positions"][player.name] = tuple(player_start)
 
         if self.show_explored:
@@ -67,7 +68,7 @@ class InclusiveGridEnvironment(GridEnvironment):
                 self.state["_explored"][player.name] = [
                     [False for _ in range(self.width)] for _ in range(self.height)
                 ]
-                self._mark_explored(player.name, self.get_player_position(player.name))
+                self._mark_explored(player.name, self._get_player_position(player.name))
 
     def _mark_explored(self, player_name: str, pos: Position) -> None:
         """Mark cells around a position as explored for the given player."""
@@ -77,19 +78,19 @@ class InclusiveGridEnvironment(GridEnvironment):
                 if 0 <= i < self.height and 0 <= j < self.width:
                     self.state["_explored"][player_name][i][j] = True
 
-    def get_player_position(self, player_name: str) -> Position:
+    def _get_player_position(self, player_name: str) -> Position:
         """Get the position of a player."""
         return self.state["_player_positions"][player_name]
 
-    def get_player_object(self, player_name: str) -> PlayerObject:
+    def _get_player_object(self, player_name: str) -> PlayerObject:
         """Get the player object for a given player."""
-        return self.get_objects_at(self.get_player_position(player_name))[-1]
+        return self._get_objects_at(self._get_player_position(player_name))[-1]
 
-    def move_player(self, player_name: str, direction: str) -> None:
+    def _move_player(self, player_name: str, direction: str) -> None:
         """Move a player in a given direction."""
-        y, x = self.get_player_position(player_name)
-        player_object = self.get_player_object(player_name)
-        self.remove_object(player_object)
+        y, x = self._get_player_position(player_name)
+        player_object = self._get_player_object(player_name)
+        self._remove_object(player_object)
 
         if direction == "n":
             player_object.position = (y - 1, x)
@@ -100,18 +101,18 @@ class InclusiveGridEnvironment(GridEnvironment):
         elif direction == "w":
             player_object.position = (y, x - 1)
 
-        self.add_object(player_object)
+        self._add_object(player_object)
 
         if self.show_explored:
             self._mark_explored(player_name, player_object.position)
 
         self.state["_player_positions"][player_name] = player_object.position
 
-    def _is_action_valid_in_state(
+    def _action_valid_in_state(
         self, player: Player, direction: Literal["n", "s", "e", "w"]
     ) -> Tuple[bool, str]:
         """Basic check if a move is valid, assuming the player is part of the grid and the action is to move."""
-        y, x = self.get_player_position(player.name)
+        y, x = self._get_player_position(player.name)
 
         if direction == "n":
             new_pos = (y - 1, x)
@@ -134,7 +135,7 @@ class InclusiveGridEnvironment(GridEnvironment):
 
         return True, ""
 
-    def visible_grid(self, player_name: Optional[str]) -> List[List[bool]]:
+    def _visible_grid(self, player_name: Optional[str]) -> List[List[bool]]:
         """
         Compute a boolean visibility mask for the grid based on
         limited_visibility, show_explored, and player position/exploration.
@@ -151,7 +152,7 @@ class InclusiveGridEnvironment(GridEnvironment):
 
         # limited visibility and no explored map: local 3x3 around player
         mask = [[False for _ in range(self.width)] for _ in range(self.height)]
-        pos = self.get_player_position(player_name)
+        pos = self._get_player_position(player_name)
         if pos is not None:
             y, x = pos
             for i in range(max(0, y - 1), min(self.height, y + 2)):
@@ -167,7 +168,7 @@ class InclusiveGridEnvironment(GridEnvironment):
                                 ) -> str:
         """Format the grid for display as string."""
         if mask is None:
-            mask = self.visible_grid(player_name)
+            mask = self._visible_grid(player_name)
 
         return super()._render_state_as_string(player_name, mask)
 
@@ -185,7 +186,7 @@ class InclusiveGridEnvironment(GridEnvironment):
             Base64-encoded PNG image data
         """
         if mask is None:
-            mask = self.visible_grid(player_name)
+            mask = self._visible_grid(player_name)
 
         return super()._render_state_as_image(player_name, mask)
 
@@ -196,6 +197,6 @@ class InclusiveGridEnvironment(GridEnvironment):
         Pretty print the grid state.
         """
         if mask is None:
-            mask = self.visible_grid(player_name)
+            mask = self._visible_grid(player_name)
 
         return super()._render_state_as_human_readable(player_name, mask)

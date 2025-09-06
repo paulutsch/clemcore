@@ -158,7 +158,7 @@ class GameEnvironment(ABC):
 
         self.state["moves"] += 1
 
-        if self._is_action_valid(player, action):
+        if self._action_valid(player, action):
             self._update_state_through_action(player, action)
             self.state["terminated"], self.state["success"] = self._check_won(player)
             module_logger.debug(f"[step] New game state: \n{to_pretty_json(self.state)}")
@@ -189,7 +189,7 @@ class GameEnvironment(ABC):
             return True
         return False
 
-    def _is_action_valid(self, player: Player, action: Action) -> bool:
+    def _action_valid(self, player: Player, action: Action) -> bool:
         if action.get("action_type") is None:
             raise ValueError(f"[step] No action type in action: {action}")
 
@@ -224,7 +224,7 @@ class GameEnvironment(ABC):
         """
         Check if an action is invalid in the current state.
         """
-        is_valid, warning = self._is_action_valid_in_state(player, action)
+        is_valid, warning = self._action_valid_in_state(player, action)
         if not is_valid:
             self.state["_warning"] = warning
             return True
@@ -249,7 +249,7 @@ class GameEnvironment(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _is_action_valid_in_state(self, player: Player, action: Action) -> Tuple[bool, str]:
+    def _action_valid_in_state(self, player: Player, action: Action) -> Tuple[bool, str]:
         """
         Validate if an action is legal in the current state.
 
