@@ -14,7 +14,15 @@ module_logger = logging.getLogger(__name__)
 
 
 class EnvGameMaster(GameMaster):
-    """Extended GameMaster, integrating a GameEnvironment as self-contained object for state management."""
+    """
+    Game master orchestrating players interacting with a GameEnvironment.
+
+    Responsibilities:
+    - Manage player order and rounds
+    - Validate/parse player responses into environment actions
+    - Call environment.observe()/step() and log reward/state
+    - Emit episode-level metrics on termination
+    """
 
     def __init__(
             self,
@@ -22,11 +30,12 @@ class EnvGameMaster(GameMaster):
             experiment: dict,
             player_models: List[backends.Model],
     ):
-        """
+        """Construct the game master.
+
         Args:
-            game_spec: The game spec (as specified in game_registry).
-            experiment: The experiment (set of instances) to use.
-            player_models: Player models to use for one or two players.
+            game_spec (GameSpec): The game specification from the registry.
+            experiment (dict): The experiment (set of instances) to run.
+            player_models (List[backends.Model]): Backend model adapters for one or more players.
         """
         super().__init__(game_spec, experiment, player_models)
         self.game_environment = None
@@ -40,25 +49,30 @@ class EnvGameMaster(GameMaster):
         self.current_round: int = 0
 
     def __setstate__(self, state):
+        """Restore state after unpickling.
+
+        Args:
+            state (dict): The serialized __dict__ to restore.
+        """
         self.__dict__.update(state)
         for player in self.players_by_names.values():
             player.register_many(self._loggers)
 
     def get_players(self) -> List[Player]:
-        """Get a list of the players.
+        """Get a list of the registered players in order.
+
         Returns:
-            List of Player instances in the order they are added.
+            List[Player]: Players in the order they were added.
         """
         return list(self.players_by_names.values())
 
     def add_player(self, player: Player):
-        """Add a player to the game. The same player cannot be added twice.
-        The player identity is determined by the player's name.
+        """Register a player with the master and environment.
 
-        Important: During gameplay, the players will be called in the same order as added to the game master!
+        Players act in the order they are added. Names must be unique.
 
         Args:
-            player: The player to be added to the game. The player's name must be unique.
+            player (Player): Player instance to add.
         """
         player.register_many(self._loggers)
         player.name = f"Player {len(self.players_by_names) + 1}"
@@ -73,13 +87,13 @@ class EnvGameMaster(GameMaster):
         self.game_environment.add_player(player)
 
     def _next_player(self) -> Player:
-        """
-        Subclasses can overwrite this method to determine the next player after a player's turn has been passed.
+        """Subclasses can overwrite this method to determine the next player after a player's turn has been passed.
 
         Default: The gamer master passes the turn to the next player in the player list (order as added).
         Starting again with the first player, when all players have had their turn(s).
 
-        :return: the next (current) player
+        Returns:
+            Player: The next (current) player.
         """
         self.current_player_idx = (self.current_player_idx + 1) % len(
             self.players_by_names
@@ -87,12 +101,13 @@ class EnvGameMaster(GameMaster):
         return self.get_players()[self.current_player_idx]
 
     def setup(self, **kwargs):
-        """Load resources and prepare everything to play the game.
-        Intended to be left as-is by inheriting classes. Implement game-specific setup functionality in the _on_setup
-        method.
-        Called by the game's GameBenchmark run method for each game instance.
+        """Prepare the game for a specific game instance.
+
+        Calls the subclass hook _on_setup(**kwargs), sets the initial current player,
+        and triggers the before-game hook.
+
         Args:
-            kwargs: A game instance dictionary read from the game's instances.json.
+            kwargs (dict): Instance configuration (from instances.json).
         """
         self._on_setup(**kwargs)
         self.current_player = self.get_players()[self.current_player_idx]
@@ -106,20 +121,27 @@ class EnvGameMaster(GameMaster):
         Instantiate, add, and reset the game environment here.
 
         Args:
-            kwargs: Keyword arguments of the game instance.
+            kwargs (dict): Keyword arguments of the game instance.
         """
         raise NotImplementedError
 
     def observe(self) -> Tuple[Player, Dict]:
-        """
-        Returns the current player and their observation from the environment.
+        """Return the current player and that player's observation.
+
+        Returns:
+            Tuple[Player, Dict]: (current_player, observation)
         """
         observation = self.game_environment.observe(self.current_player)
         return self.current_player, observation
 
     def step(self, response: str) -> Tuple[bool, Dict]:
-        """
-        Applies the player's response as an action in the environment, advances the game, and returns (done, info).
+        """Apply the player's textual response as an action, advance the environment, and return (terminated, info).
+
+        Args:
+            response (str): The raw textual response from the current player.
+
+        Returns:
+            Tuple[bool, Dict]: (terminated, info) where info is the environment's public state snapshot.
         """
         state = {}
 
@@ -154,31 +176,41 @@ class EnvGameMaster(GameMaster):
         return terminated, state
 
     def is_done(self) -> bool:
-        """
-        Returns True if the game is finished (terminated in the environment).
+        """True if the environment's state indicates termination.
+
+        Returns:
+            bool: Whether the episode has terminated.
         """
         return self.game_environment.state.get("terminated", False)
 
     def has_started(self) -> bool:
-        """
-        Returns True if the game has started (current_player is set and environment is not in initial state).
+        """True if a current player is set and the environment is initialized.
+
+        Returns:
+            bool: Whether the game has started.
         """
         return self.current_player is not None and self.game_environment.state is not None
 
     def _start_next_round(self) -> bool:
-        """
-        Subclasses can overwrite this method to specify when a next round should start after a player's turn is passed.
+        """Decide whether to start a new round after passing the turn.
 
-        Default: Start next round when we cycled through the whole list i.e. it is again the first player's turn.
+        Default: Start next round when we cycle back to the first player.
 
-        :return: True, when to start a new round
+        Returns:
+            bool: True if a new round should begin.
         """
         return self.current_player_idx == 0
 
     def _should_pass_turn(self, aborted: bool):
-        """
-        Whether to pass the turn to the next player. Otherwise, the current player keeps playing
-        based on the context set via set_player_context(player, content).
+        """Decide whether to pass the turn to the next player after this step.
+
+        Default: keep the player if action was aborted; otherwise pass.
+
+        Args:
+            aborted (bool): Whether the last step was aborted by the environment.
+
+        Returns:
+            bool: True to pass the turn; False to keep the current player.
         """
         if aborted:
             return False
@@ -186,62 +218,54 @@ class EnvGameMaster(GameMaster):
 
     @abc.abstractmethod
     def _response_valid(self, player: Player, response: str) -> bool:
-        """
-        Decide if a player response is valid. An invalid response breaks the format rules. In this case, depending on _should_terminate_on_invalid_response(), the game might be terminated.
+        """Validate the textual response format before parsing to an action.
+
+        Subclasses should implement lightweight format checks (e.g., tokens in range),
+        not game-state legality (which is handled in the environment).
 
         Args:
-            player: The player that gave the response.
-            response: The response of the current player.
+            player (Player): The player that gave the response.
+            response (str): The raw response string.
+
         Returns:
-            True, if the response is fine. Otherwise, False.
+            bool: True if the response matches the expected format; otherwise False.
         """
         raise NotImplementedError
 
     def _violated_format_action(self) -> Action:
-        """
-        Create an action that represents a response that violates the format.
+        """Build a synthetic action representing a format violation in the response.
+
+        Returns:
+            Action: Action dict with action_type="violated_format".
         """
         return {"action_type": "violated_format"}
 
     @abc.abstractmethod
     def _parse_action_from_response(self, response: str) -> Action:
-        """Create an action from a player's response.
+        """Parse a textual response into a structured action dict.
 
         Args:
-            response: The textual response from the player
+            response (str): The textual response from the player.
 
         Returns:
-            An action dictionary with:
-                - action_type: The type of action
-                - body: The text response from the player
+            Action: Dictionary including at least "action_type" and any game-specific fields.
         """
         raise NotImplementedError
 
     def _on_before_round(self):
-        """Executed in the play loop before a new round of gameplay starts.
-
-        Hook: Modify this method for game-specific functionality.
-        """
+        """Hook executed before a new round starts."""
         pass
 
     def _on_after_round(self):
-        """Executed in the play loop after a round of gameply finished i.e. _start_next_round() resolves to True.
-
-        Hook: Modify this method for game-specific functionality.
-        """
+        """Hook executed after a round finishes (when _start_next_round() becomes True)."""
         pass
 
     def _on_before_game(self):
-        """Executed once at the start, at the start of the play loop.
-
-        Hook: Modify this method for game-specific functionality.
-        """
+        """Hook executed once before the first turn."""
         pass
 
     def _end_game(self):
-        """
-        Finishes the game by adding the episode scores to the logs and calling the after game hook.
-        """
+        """Finalize the episode: log standard metrics and reset players."""
         final_state = self.game_environment.state
 
         aborted = int(final_state.get("aborted", False))
@@ -256,8 +280,5 @@ class EnvGameMaster(GameMaster):
             player.reset()
 
     def _on_after_game(self):
-        """Executed once at the end, at the end of the play loop.
-
-        Hook: Modify this method for game-specific functionality.
-        """
+        """Hook executed once after the episode ends."""
         pass

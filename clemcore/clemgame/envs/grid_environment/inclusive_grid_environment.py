@@ -22,7 +22,12 @@ class InclusiveGridState(GridState):
 
 
 class PlayerObject(Object):
-    """Optionally represents a player in the grid."""
+    """Optionally represents a player in the grid.
+
+    Attributes:
+        position: Initial (row, col) of the player object.
+        player: The Player the object represents.
+    """
 
     def __init__(self, position: Position, player: Player):
         super().__init__(position, f"Player_{player.name}", "P", "👤")
@@ -30,7 +35,11 @@ class PlayerObject(Object):
 
 
 class InclusiveGridEnvironment(GridEnvironment):
-    """Base class for immersive grid-based game environments, including players as objects part of the grid."""
+    """Grid environment that embeds players as movable Objects and supports visibility masks.
+
+    Adds helper methods for player position/object lookup, movement, exploration tracking,
+    and a generic movement legality check usable by many navigation-style games.
+    """
 
     def __init__(
         self,
@@ -39,7 +48,7 @@ class InclusiveGridEnvironment(GridEnvironment):
         """Initialize the inclusive grid environment.
 
         Args:
-            config: Configuration options
+            config (Dict): Configuration options
         """
         super().__init__(config)
 
@@ -52,7 +61,7 @@ class InclusiveGridEnvironment(GridEnvironment):
         }
 
     def reset(self):
-        """Reset the environment to its initial state."""
+        """Reset the environment, place player objects, and initialize optional explored maps."""
         super().reset()
 
         players_start = self.config.get("grid", {}).get("players_start", None)
@@ -71,7 +80,12 @@ class InclusiveGridEnvironment(GridEnvironment):
                 self._mark_explored(player.name, self._get_player_position(player.name))
 
     def _mark_explored(self, player_name: str, pos: Position) -> None:
-        """Mark cells around a position as explored for the given player."""
+        """Mark a 3x3 neighborhood around pos as explored for the player (if enabled).
+
+        Args:
+            player_name (str): Player identifier.
+            pos: (row, col) center to mark explored.
+        """
         row, col = pos
         for i in range(row - 1, row + 2):
             for j in range(col - 1, col + 2):
@@ -79,15 +93,34 @@ class InclusiveGridEnvironment(GridEnvironment):
                     self.state["_explored"][player_name][i][j] = True
 
     def _get_player_position(self, player_name: str) -> Position:
-        """Get the position of a player."""
+        """Return the (row, col) position of a player from state.
+
+        Args:
+            player_name (str): Player identifier.
+
+        Returns:
+            Position: (row, col) of the player.
+        """
         return self.state["_player_positions"][player_name]
 
     def _get_player_object(self, player_name: str) -> PlayerObject:
-        """Get the player object for a given player."""
+        """Return the PlayerObject instance representing the player in the grid.
+
+        Args:
+            player_name (str): Player identifier.
+
+        Returns:
+            PlayerObject: The object currently placed at the player's position.
+        """
         return self._get_objects_at(self._get_player_position(player_name))[-1]
 
     def _move_player(self, player_name: str, direction: str) -> None:
-        """Move a player in a given direction."""
+        """Move a player north/south/east/west and update explored map/position.
+
+        Args:
+            player_name (str): Player identifier.
+            direction (str): One of {"n", "s", "e", "w"}.
+        """
         y, x = self._get_player_position(player_name)
         player_object = self._get_player_object(player_name)
         self._remove_object(player_object)
@@ -111,7 +144,18 @@ class InclusiveGridEnvironment(GridEnvironment):
     def _action_valid_in_state(
         self, player: Player, direction: Literal["n", "s", "e", "w"]
     ) -> Tuple[bool, str]:
-        """Basic check if a move is valid, assuming the player is part of the grid and the action is to move."""
+        """
+        Basic movement legality check against grid bounds.
+
+        Subclasses can extend this to include obstacles, doors, hazards, etc.
+
+        Args:
+            player (Player): The player attempting the move.
+            direction (str): One of {"n", "s", "e", "w"}.
+
+        Returns:
+            Tuple[bool, str]: (is_valid, warning_message) where warning_message explains rejection.
+        """
         y, x = self._get_player_position(player.name)
 
         if direction == "n":
@@ -137,10 +181,13 @@ class InclusiveGridEnvironment(GridEnvironment):
 
     def _visible_grid(self, player_name: Optional[str]) -> List[List[bool]]:
         """
-        Compute a boolean visibility mask for the grid based on
-        limited_visibility, show_explored, and player position/exploration.
+        Compute a visibility mask given limited_visibility/show_explored and player location.
 
-        True indicates that a cell is visible to the player.
+        Args:
+            player_name (Optional[str]): Player identifier whose perspective to render (or None for global view).
+
+        Returns:
+            List[List[bool]]: Matrix marking visible (True) vs hidden (False) cells.
         """
         if not self.limited_visibility:
             # full grid
@@ -166,7 +213,17 @@ class InclusiveGridEnvironment(GridEnvironment):
     def _render_state_as_string(self, player_name: Optional[str] = None,
                                 mask: Optional[List[List[bool]]] = None
                                 ) -> str:
-        """Format the grid for display as string."""
+        """Format the grid for display as string with player-aware masking.
+
+        Args:
+            player_name (Optional[str]): Optional player name. If provided, uses the explored map of that player
+                to render explored vs unexplored cells and marks the player's current position with 'player'.
+                If None, shows the entire grid without fog of war.
+            mask (Optional[List[List[bool]]]): Optional precomputed visibility mask.
+
+        Returns:
+            str: Compact textual representation of the visible grid.
+        """
         if mask is None:
             mask = self._visible_grid(player_name)
 
@@ -178,12 +235,13 @@ class InclusiveGridEnvironment(GridEnvironment):
         """Format the grid for display as image.
 
         Args:
-            player_name: Optional player name. If provided, uses the explored map of that player
+            player_name (Optional[str]): Optional player name. If provided, uses the explored map of that player
                 to render explored vs unexplored cells and marks the player's current position with 'player'.
                 If None, shows the entire grid without fog of war.
+            mask (Optional[List[List[bool]]]): Optional precomputed visibility mask.
 
         Returns:
-            Base64-encoded PNG image data
+            bytes: Base64-encoded PNG image data
         """
         if mask is None:
             mask = self._visible_grid(player_name)
@@ -194,7 +252,16 @@ class InclusiveGridEnvironment(GridEnvironment):
                                         mask: Optional[List[List[bool]]] = None
                                         ) -> str:
         """
-        Pretty print the grid state.
+        Pretty-print the grid state with player-aware masking.
+
+        Args:
+            player_name (Optional[str]): Optional player name. If provided, uses the explored map of that player
+                to render explored vs unexplored cells and marks the player's current position with 'player'.
+                If None, shows the entire grid without fog of war.
+            mask (Optional[List[List[bool]]]): Optional precomputed visibility mask.
+
+        Returns:
+            str: Human-readable grid representation.
         """
         if mask is None:
             mask = self._visible_grid(player_name)

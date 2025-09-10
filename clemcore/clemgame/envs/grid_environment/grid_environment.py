@@ -16,7 +16,14 @@ Position = Tuple[int, int]
 
 @dataclass
 class Object(ABC):
-    """Base class for all objects in the grid environment."""
+    """Base class for all objects in the grid environment.
+
+    Attributes:
+        position: (row, col) position in the grid.
+        name: Unique or descriptive object name.
+        symbol: Short ASCII symbol for compact renders.
+        pretty_symbol: Emoji or human-friendly symbol for pretty renders.
+    """
     position: Position
     name: str
     symbol: str  # char to be shown in the grid
@@ -44,7 +51,11 @@ class GridState(GameState):
 
 
 class GridEnvironment(GameEnvironment):
-    """Base class for grid-based game environments."""
+    """Base class for grid-based game environments.
+
+    Provides a 2D grid with typed cells that can contain stacked Objects and rendering helpers.
+    Subclasses implement game-specific legality, transitions, and observation content.
+    """
 
     def __init__(
         self,
@@ -53,7 +64,7 @@ class GridEnvironment(GameEnvironment):
         """Initialize the grid environment.
 
         Args:
-            config: Additional configuration options
+            config (Dict): Additional configuration options
         """
         super().__init__(config)
 
@@ -68,28 +79,43 @@ class GridEnvironment(GameEnvironment):
         }
 
     def reset(self):
-        """Reset the environment to its initial state."""
+        """Reset the environment to an empty grid and clear per-episode state."""
         super().reset()
 
         self.state["_grid"] = [[GridCell(objects=[], position=(y, x))
                                         for x in range(self.width)] for y in range(self.height)]
 
-    def _add_object(self, obj: Object) -> None:
-        """Add an object to the grid at its position."""
+    def _add_object(self, obj: Object):
+        """Add an object to the grid cell at obj.position (top of stack).
+
+        Args:
+            obj (Object): The object to insert.
+        """
         y, x = obj.position
         if 0 <= x < self.width and 0 <= y < self.height:
             self.state["_grid"][y][x]["objects"].append(obj)
         else:
             raise ValueError(f"Position {obj.position} is out of bounds")
 
-    def _remove_object(self, obj: Object) -> None:
-        """Remove an object from the grid."""
+    def _remove_object(self, obj: Object):
+        """Remove an object instance from its current grid cell, if present.
+
+        Args:
+            obj (Object): The object to remove.
+        """
         y, x = obj.position
         if obj in self.state["_grid"][y][x]["objects"]:
             self.state["_grid"][y][x]["objects"].remove(obj)
 
     def _get_objects_at(self, position: Position) -> List[Object]:
-        """Get all objects at a given position."""
+        """Return the stack of objects at a position; empty list if out of bounds or empty.
+
+        Args:
+            position (Position): (row, col) position to query.
+
+        Returns:
+            List[Object]: Top-to-bottom stack at the given cell (may be empty).
+        """
         y, x = position
         if 0 <= x < self.width and 0 <= y < self.height:
             return self.state["_grid"][y][x]["objects"]
@@ -99,7 +125,17 @@ class GridEnvironment(GameEnvironment):
                                 player_name: Optional[str] = None,
                                 mask: Optional[List[List[bool]]] = None
                                 ) -> str:
-        """Format the grid for display as string."""
+        """Format the grid for display as a compact string, optionally masked for visibility.
+
+        Args:
+            player_name (Optional[str]): Optional player name. If provided, uses the explored map of that player
+                to render explored vs unexplored cells and marks the player's current position with 'player'.
+                If None, shows the entire grid without fog of war.
+            mask (Optional[List[List[bool]]]): Optional precomputed visibility mask.
+
+        Returns:
+            str: Compact textual representation of the visible grid.
+        """
         grid_str = ""
 
         for i in range(self.height):
@@ -125,12 +161,12 @@ class GridEnvironment(GameEnvironment):
         """Format the grid for display as image.
 
         Args:
-            player_name: Optional player name. If provided, uses the explored map of that player
+            player_name (Optional[str]): Optional player name. If provided, uses the explored map of that player
                 to render explored vs unexplored cells and marks the player's current position with 'player'.
                 If None, shows the entire grid without fog of war.
 
         Returns:
-            Base64-encoded PNG image data
+            bytes: Base64-encoded PNG image data
         """
         fig, ax = plt.subplots(figsize=(max(6, self.width * 0.8), max(4, self.height * 0.6)))
         ax.set_xlim(0, self.width)
@@ -178,7 +214,16 @@ class GridEnvironment(GameEnvironment):
                                         mask: Optional[List[List[bool]]] = None
                                         ) -> str:
         """
-        Pretty print the grid state.
+        Pretty-print the grid state using emoji symbols, optionally masked.
+
+        Args:
+            player_name (Optional[str]): Optional player name. If provided, uses the explored map of that player
+                to render explored vs unexplored cells and marks the player's current position with 'player'.
+                If None, shows the entire grid without fog of war.
+            mask (Optional[List[List[bool]]]): Optional precomputed visibility mask.
+
+        Returns:
+            str: Human-readable grid representation.
         """
         pretty_grid = ""
 
