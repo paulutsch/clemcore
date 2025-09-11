@@ -193,7 +193,6 @@ class GameEnvironment(ABC):
             bool: True if max_moves is configured and the threshold has been reached; otherwise False.
         """
         if self.max_moves is not None and self.state["moves"] >= self.max_moves:
-            module_logger.warning(f"[_max_moves_reached] Max moves reached — will abort and terminate")
             return True
         return False
 
@@ -276,8 +275,7 @@ class GameEnvironment(ABC):
 
     @abstractmethod
     def _check_won(self, player: Player) -> Tuple[bool, bool]:
-        """
-        Check the state of the game, and return a tuple of (terminated, success).
+        """Check the state of the game, and return a tuple of (terminated, success).
 
         If the game is not yet won but the action was legal, return (False, True).
         If the game is won, return (True, True).
@@ -293,12 +291,10 @@ class GameEnvironment(ABC):
 
     @abstractmethod
     def _action_valid_in_state(self, player: Player, action: Action) -> Tuple[bool, str]:
-        """
-        Validate if an action is legal in the current state.
+        """Validate if an action is legal in the current state.
 
-        Overwrite this method in your subclass to implement custom validation logic based on the current state.
-
-        Make sure you set state["_warning"] in here if the action is invalid, so that the player can get appropriate feedback.
+        Implement this method in your subclass for custom validation logic based on the current state.
+        Make sure you return a warning message in here if the action is invalid, which will be sent to the player as feedback.
 
         Args:
             player (Player): The player attempting the action.
@@ -310,8 +306,7 @@ class GameEnvironment(ABC):
         raise NotImplementedError
 
     def add_player(self, player: Player):
-        """
-        Add a player to the environment.
+        """Add a player to the environment.
 
         Args:
             player (Player): The player to add.
@@ -320,8 +315,7 @@ class GameEnvironment(ABC):
 
     @abstractmethod
     def _update_observations(self):
-        """
-        Set the new observations for all players.
+        """Set the new observations for all players.
 
         Make sure to use _render_state(player.name) to get the state of the environment for each player.
         Create a text_content string that includes the current prompt.
@@ -436,12 +430,11 @@ class GameEnvironment(ABC):
         Returns:
             float: Reward for the most recent step.
         """
-        aborted = self.state["aborted"]
-        return 0 if aborted else 1
+        success = self.state["success"]
+        return 1 if success else 0
 
     def info(self) -> Dict[str, Any]:
-        """
-        Return a dictionary with the current public state of the environment.
+        """Return a dictionary with the current public state of the environment.
 
         By default, all state keys that do NOT start with '_' are considered public and will be exported.
 

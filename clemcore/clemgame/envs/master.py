@@ -155,7 +155,7 @@ class EnvGameMaster(GameMaster):
         self.log_to_self("state", state)
         self.log_to_self("reward", reward)
 
-        if aborted and reward == 0:
+        if aborted and not terminated:
             self.count_request_violation()
 
         if terminated:
