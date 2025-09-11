@@ -60,9 +60,9 @@ class InclusiveGridEnvironment(GridEnvironment):
             "_explored": None,
         }
 
-    def reset(self):
-        """Reset the environment, place player objects, and initialize optional explored maps."""
-        super().reset()
+    def _initialize_state(self) -> None:
+        """Initialize player objects, positions, and explored maps (if enabled)."""
+        super()._initialize_state()
 
         players_start = self.config.get("grid", {}).get("players_start", None)
         self.state["_player_positions"] = {}

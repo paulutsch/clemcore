@@ -107,7 +107,6 @@ class GameEnvironment(ABC):
             "aborted": False,
             "moves": 0,
             "_warning": "",
-            # add fields for game-specific state on inheritance
         }
 
         self.players: List[Player] = []
@@ -115,8 +114,7 @@ class GameEnvironment(ABC):
     def reset(self):
         """Reset the environment to its initial state.
 
-        Overwrite this in your inheriting class to account for game-specific state.
-        Make sure to call _update_observations() in here after resetting the state.
+        Subclasses need to override _initialize_state() and possibly set action spaces.
         """
         self.state = {
             "terminated": False,
@@ -124,11 +122,19 @@ class GameEnvironment(ABC):
             "aborted": False,
             "moves": 0,
             "_warning": "",
-            # add fields for game-specific state on inheritance
+            # add fields for game-specific state on inheritance in _initialize_state()
         }
 
         self.observations = {}
         self.action_spaces = {}
+
+        self._initialize_state()
+
+        for player in self.players:
+            action_space = self._action_space_for(player)
+            self.action_spaces[player.name] = action_space
+
+        self._update_observations()
 
     def observe(self, player: Player) -> Observation:
         """Get the current observation for a specific player.
@@ -315,17 +321,54 @@ class GameEnvironment(ABC):
         """
         self.players.append(player)
 
-    @abstractmethod
     def _update_observations(self):
-        """Set the new observations for all players.
+        """Default observation update procedure.
 
-        Make sure to use _render_state(player.name) to get the state of the environment for each player.
-        Create a text_content string that includes the current prompt.
-        Make sure text_content includes state["_warning"] if the action is invalid, so that the player can get appropriate feedback.
-        After that, you can use _create_observation to create the observation for each player.
-        Finally, set the observation for each player using self.observations[player.name] = observation.
+        Iterates players, renders state, composes a prompt via _compose_prompt,
+        creates an observation and assigns it.
+        """
+        for player in self.players:
+            rendered_state = self._render_state(player.name)
+            prompt = self._compose_prompt(player.name)
+            observation = self._create_observation(prompt, rendered_state)
+            self.observations[player.name] = observation
+
+    def _compose_prompt(self, player_name: Optional[str] = None) -> str:
+        """Compose the textual prompt for a player's observation."""
+        lines: List[str] = []
+        warning = self.state.get("_warning", "")
+        if warning:
+            lines.append(f"Warning: {warning}\n\n")
+        turn_prompt = self._compose_turn_prompt(player_name)
+        lines.append(turn_prompt + "\n\n")
+        return "".join(lines)
+
+    @abstractmethod
+    def _compose_turn_prompt(self, player_name: Optional[str] = None) -> str:
+        """Compose the turn prompt for a player.
+
+        Args:
+            player_name (Optional[str]): Optional player name.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def _initialize_state(self) -> None:
+        """Hook for subclasses to initialize game-specific state keys.
+
+        Called by reset() after universal state is cleared; should not modify
+        observations or action spaces. Use this to populate additional fields
+        in self.state or prepare internal caches.
+        """
+        raise NotImplementedError
+
+    def _action_space_for(self, player: Player) -> List[Any]:
+        """Return the action space for a given player.
+
+        Subclasses may override to provide per-player action spaces. If an empty
+        list (or other falsy value) is returned, no action space will be set.
+        """
+        return ["default"]
 
     def _render_state(self, player_name: Optional[str] = None) -> Union[str, bytes]:
         """Format the state for display as string or image.
@@ -414,15 +457,6 @@ class GameEnvironment(ABC):
             }
 
         return observation
-
-    def _set_action_space(self, player: Player, action_space: List[Any]):
-        """Set the action space for a specific player.
-
-        Args:
-            player (Player): The player to set the action space for
-            action_space (List[Any]): The action space to set
-        """
-        self.action_spaces[player.name] = action_space
 
     def reward(self) -> float:
         """Calculate the reward for the most recent step.

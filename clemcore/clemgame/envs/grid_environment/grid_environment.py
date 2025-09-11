@@ -78,12 +78,12 @@ class GridEnvironment(GameEnvironment):
             ],
         }
 
-    def reset(self):
-        """Reset the environment to an empty grid and clear per-episode state."""
-        super().reset()
-
-        self.state["_grid"] = [[GridCell(objects=[], position=(y, x))
-                                        for x in range(self.width)] for y in range(self.height)]
+    def _initialize_state(self) -> None:
+        """Initialize/clear the grid for a new episode."""
+        self.state["_grid"] = [
+            [GridCell(objects=[], position=(y, x)) for x in range(self.width)]
+            for y in range(self.height)
+        ]
 
     def _add_object(self, obj: Object):
         """Add an object to the grid cell at obj.position (top of stack).
