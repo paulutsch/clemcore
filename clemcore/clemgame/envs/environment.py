@@ -162,6 +162,8 @@ class GameEnvironment(ABC):
         self.state["success"] = False
         self.state["aborted"] = False
 
+        self.state["_warning"] = ""
+
         self.state["moves"] += 1
 
         if self._action_valid(player, action):
