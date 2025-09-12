@@ -22,9 +22,6 @@ class GameBenchmarkCallback(abc.ABC):
     def on_game_start(self, game_master: "GameMaster", game_instance: Dict):
         pass
 
-    def on_game_ready(self, game_master: "GameMaster", game_instance: Dict):
-        pass
-
     def on_game_step(self, game_master: "GameMaster", game_instance: Dict, game_step: GameStep):
         pass
 
@@ -53,10 +50,6 @@ class GameBenchmarkCallbackList(GameBenchmarkCallback):
     def on_game_start(self, game_master: "GameMaster", game_instance: Dict):
         for callback in self.callbacks:
             callback.on_game_start(game_master, game_instance)
-
-    def on_game_ready(self, game_master: "GameMaster", game_instance: Dict):
-        for callback in self.callbacks:
-            callback.on_game_ready(game_master, game_instance)
 
     def on_game_step(self, game_master: "GameMaster", game_instance: Dict, game_step: GameStep):
         for callback in self.callbacks:
