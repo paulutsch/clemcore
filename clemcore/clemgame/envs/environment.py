@@ -31,12 +31,11 @@ class GameState(TypedDict):
         default info() implementation.
 
     Required fields:
-    - render (str): rendered game state, to be sent to player and logged
     - terminated (bool): Whether the game has terminated
     - success (bool): Whether the game was successful
     - aborted (bool): Whether the game was aborted
-
-
+    - moves (int): The number of moves made in the game
+    - _warning (str): A warning message to be sent to the player
     """
     terminated: bool
     success: bool
@@ -101,15 +100,9 @@ class GameEnvironment(ABC):
         self.render_as = self.config.get("render_as", "string")
         self.max_moves = self.config.get("max_moves", None)
 
-        self.state: GameState = {
-            "terminated": False,
-            "success": False,
-            "aborted": False,
-            "moves": 0,
-            "_warning": "",
-        }
-
         self.players: List[Player] = []
+
+        self.state: GameState
 
     def reset(self):
         """Reset the environment to its initial state.

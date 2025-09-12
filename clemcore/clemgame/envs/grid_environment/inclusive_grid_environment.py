@@ -55,10 +55,7 @@ class InclusiveGridEnvironment(GridEnvironment):
         self.limited_visibility = config.get("limited_visibility", False)
         self.show_explored = config.get("show_explored", False)
 
-        self.state: InclusiveGridState = {
-            "_player_positions": None,
-            "_explored": None,
-        }
+        self.state: InclusiveGridState
 
     def _initialize_state(self) -> None:
         """Initialize player objects, positions, and explored maps (if enabled)."""
@@ -66,6 +63,7 @@ class InclusiveGridEnvironment(GridEnvironment):
 
         players_start = self.config.get("grid", {}).get("players_start", None)
         self.state["_player_positions"] = {}
+
         for i, player in enumerate(self.players):
             player_start = players_start[i]
             self._add_object(PlayerObject(position=player_start, player=player))

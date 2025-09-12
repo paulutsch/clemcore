@@ -71,15 +71,14 @@ class GridEnvironment(GameEnvironment):
         self.width = config.get("width", 10)
         self.height = config.get("height", 10)
 
-        self.state: GridState = {
-            "_grid": [
-                [GridCell(objects=[], position=(y, x)) for x in range(self.width)]
-                for y in range(self.height)
-            ],
-        }
+        self.state: GridState
 
     def _initialize_state(self) -> None:
-        """Initialize/clear the grid for a new episode."""
+        """Initialize/clear the grid for a new episode.
+
+        If you need additional initialization, override this method in your subclass.
+        Make sure to call super()._initialize_state() to ensure the base class initialization is performed.
+        """
         self.state["_grid"] = [
             [GridCell(objects=[], position=(y, x)) for x in range(self.width)]
             for y in range(self.height)
