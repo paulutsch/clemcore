@@ -355,7 +355,7 @@ class GameEnvironment(ABC):
         """
         raise NotImplementedError
 
-    def _action_space_for(self, player: Player) -> List[Any]:
+    def _action_space_for(self, player: Player) -> List[str]:
         """Return the action space for a given player.
 
         Subclasses may override to provide per-player action spaces. If an empty

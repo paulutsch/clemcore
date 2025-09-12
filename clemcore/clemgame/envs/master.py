@@ -4,7 +4,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 from clemcore import backends
-from clemcore.clemgame.envs.environment import Action
+from clemcore.clemgame.envs.environment import Action, GameEnvironment
 from clemcore.clemgame.master import GameMaster
 from clemcore.clemgame.metrics import METRIC_ABORTED, METRIC_LOSE, METRIC_SUCCESS
 from clemcore.clemgame.player import Player
@@ -38,15 +38,14 @@ class EnvGameMaster(GameMaster):
             player_models (List[backends.Model]): Backend model adapters for one or more players.
         """
         super().__init__(game_spec, experiment, player_models)
-        self.game_environment = None
 
-        # set players
         self.players_by_names: Dict[str, Player] = collections.OrderedDict()
-
         self.current_player: Optional[Player] = None
         self.current_player_idx: int = 0
 
         self.current_round: int = 0
+
+        self.game_environment: GameEnvironment
 
     def __setstate__(self, state):
         """Restore state after unpickling.
